@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WhisperRoom</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+
+<!-- ══════════════════ LANDING ══════════════════ -->
+<div id="landing-view" class="landing-bg">
+  <div class="landing-inner">
+
+    <div class="landing-brand">
+      <div class="brand-mark">WR</div>
+      <h1 class="brand-name">WhisperRoom</h1>
+      <p class="brand-sub">Where questions find courage.<br/>Where doubts become dialogue.</p>
+      <div class="brand-pills">
+        <span class="pill"><i class="ph ph-lock-simple"></i> Anonymous posting</span>
+        <span class="pill"><i class="ph ph-broadcast"></i> Live Q&amp;A sessions</span>
+        <span class="pill"><i class="ph ph-users-three"></i> Community forums</span>
+      </div>
+    </div>
+
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-signin">Sign In</button>
+        <button class="auth-tab" id="tab-signup">Create Account</button>
+      </div>
+
+      <!-- Sign In -->
+      <div id="signin-form" class="auth-form">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="si-email" placeholder="you@example.com"/>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="si-password" placeholder="••••••••"/>
+        </div>
+        <button class="btn-primary full" id="btn-signin">Sign In →</button>
+      </div>
+
+      <!-- Sign Up -->
+      <div id="signup-form" class="auth-form" style="display:none;">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="su-email" placeholder="you@example.com"/>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="su-password" placeholder="Min 6 characters"/>
+        </div>
+        <div class="field">
+          <label>Nickname</label>
+          <input type="text" id="su-nick" placeholder="How the community sees you"/>
+        </div>
+        <button class="btn-primary full" id="btn-signup">Create Account →</button>
+      </div>
+
+      <p class="auth-note"><i class="ph ph-lock-simple"></i> Your email stays private. Nickname is public.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════ APP ══════════════════ -->
+<div id="app-view" class="app-shell" style="display:none;">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-logo">WhisperRoom</div>
+      <button class="icon-btn theme-toggle" id="themeToggle">
+        <i class="ph ph-moon" id="themeIcon"></i>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-home"><i class="ph ph-house"></i><span>Home</span></button>
+      <button class="nav-item" id="nav-explore"><i class="ph ph-compass"></i><span>Explore</span></button>
+      <button class="nav-item" id="nav-trending"><i class="ph ph-chart-line-up"></i><span>Trending</span></button>
+      <button class="nav-item" id="nav-rooms"><i class="ph ph-chats-circle"></i><span>Rooms</span></button>
+      <button class="nav-item" id="nav-saved"><i class="ph ph-bookmark"></i><span>Saved</span></button>
+      <button class="nav-item" id="nav-activity">
+        <i class="ph ph-bell"></i><span>Activity</span>
+        <span class="notif-dot" id="notif-dot" style="display:none;"></span>
+      </button>
+      <button class="nav-item" id="nav-profile"><i class="ph ph-user-circle"></i><span>Profile</span></button>
+    </nav>
+
+    <button class="btn-compose" id="btn-create">
+      <i class="ph ph-pencil-simple-line"></i> New Post
+    </button>
+
+    <div class="sidebar-user">
+      <div class="s-avatar" id="s-avatar"></div>
+      <div>
+        <div class="s-name" id="s-name"></div>
+        <button class="s-logout" onclick="logout()">Log out</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- FEED -->
+  <main id="main-content" class="main-feed"></main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+    <div id="rp-potd"></div>
+    <div class="rp-section">
+      <div class="rp-label">Suggested for you</div>
+      <div id="rp-suggested"></div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" class="modal-overlay" style="display:none;">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<script type="module" src="script.js"></script>
+</body>
+</html>
