@@ -11,10 +11,9 @@ import {
   getDatabase, ref, push, onValue,
   get, remove, update, set
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
-import {
-  getStorage, ref as sRef,
-  uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/12.9.0/firebase-storage.js";
+/* Cloudinary replaces Firebase Storage */
+const CLOUDINARY_CLOUD = "dk1utng0y";
+const CLOUDINARY_PRESET = "ml_default";
 
 /* ── Config ── */
 const firebaseConfig = {
@@ -30,7 +29,6 @@ const firebaseConfig = {
 const app     = initializeApp(firebaseConfig);
 const auth    = getAuth(app);
 const db      = getDatabase(app);
-const storage = getStorage(app);
 
 /* ═══════ PROFANITY FILTER ═══════ */
 const BAD_WORDS = ["fuck","shit","bitch","asshole","bastard","cunt","dick","pussy","crap","idiot","moron","retard","whore","slut","nigger","faggot"];
@@ -87,21 +85,38 @@ function avatarHtml(nick, photo, cls="p-avatar") {
     : `<div class="${cls}">${initials(nick)}</div>`;
 }
 
-async function uploadFile(file, path) {
-  const r = sRef(storage, path);
-  await uploadBytes(r, file);
-  return getDownloadURL(r);
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", CLOUDINARY_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`, {
+    method: "POST",
+    body: fd
+  });
+  if (!res.ok) throw new Error("Cloudinary upload failed: " + res.statusText);
+  const data = await res.json();
+  return data.secure_url;
 }
 
 function attachmentHtml(url, name, small=false) {
   if (!url) return "";
-  const isImg = /\.(jpg|jpeg|png|gif|webp)/i.test(name||url);
-  if (isImg) return `<img src="${url}" style="border-radius:10px;max-width:100%;display:block;margin-top:8px;" alt="attachment"/>`;
+  const isImg = /\.(jpg|jpeg|png|gif|webp)/i.test(name||url) || /cloudinary\.com.*\/(image|upload)/i.test(url);
+  if (isImg) return `<img src="${url}" onclick="openLightbox('${url}')" style="border-radius:10px;max-width:100%;display:block;margin-top:8px;cursor:zoom-in;" alt="attachment"/>`;
   return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:${small?"12":"13"}px;color:var(--txt-2);">
     <i class="ph ph-file-text" style="color:var(--blue);font-size:18px;"></i>
     <a href="${url}" target="_blank" style="color:var(--blue);text-decoration:none;">${name||"View file"}</a>
   </div>`;
 }
+
+window.openLightbox = function(url) {
+  const lb = document.createElement("div");
+  lb.id = "lightbox-overlay";
+  lb.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;";
+  lb.innerHTML = `<img src="${url}" style="max-width:92vw;max-height:92vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,0.6);"/>
+    <button onclick="event.stopPropagation();this.parentElement.remove()" style="position:absolute;top:20px;right:24px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:22px;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>`;
+  lb.onclick = () => lb.remove();
+  document.body.appendChild(lb);
+};
 
 /* ═══════ DARK MODE ═══════ */
 function applyTheme(dark) {
@@ -159,6 +174,8 @@ window.logout = () => { signOut(auth); location.reload(); };
 function startApp() {
   $("landing-view").style.display="none";
   $("app-view").style.display="grid";
+  window._currentUser = currentUser;
+  window._currentUID = currentUID;
   const sa=$("s-avatar");
   if(userProfile.photoURL) sa.innerHTML=`<img src="${userProfile.photoURL}" alt="${currentUser}"/>`;
   else sa.textContent=initials(currentUser);
@@ -361,7 +378,7 @@ function showProfile(tab="posts") {
     const f=e.target.files[0]; if(!f) return;
     toast("Uploading…");
     try {
-      const url=await uploadFile(f,`avatars/${currentUID}`);
+      const url=await uploadFile(f);
       userProfile.photoURL=url;
       await update(ref(db,`users/${currentUID}`),{photoURL:url});
       $("s-avatar").innerHTML=`<img src="${url}" alt="${currentUser}"/>`;
@@ -653,6 +670,7 @@ function commentHtml(postId,cid,c,isReply,children=[]) {
             <button class="c-vote-btn ${mv===-1?"down":""}" onclick="voteComment('${postId}','${cid}',-1)">▼</button>
             ${!isReply?`<button class="c-reply-btn" onclick="showReplyBox('${postId}','${cid}')">Reply</button>`:""}
             <span style="font-size:11px;color:var(--txt-3);margin-left:4px;">${timeAgo(c.timestamp)}</span>
+            ${(c.authorId===currentUID||c.authorId===window._currentUID||c.author===currentUser||c.author===window._currentUser)?`<button class="c-reply-btn" style="color:#e05555;margin-left:6px;" onclick="deleteComment('${postId}','${cid}',${!!c.parentId})"><i class="ph ph-trash"></i> delete</button>`:""}
           </div>
           <div id="rb-${cid}"></div>
         </div>
@@ -689,27 +707,53 @@ window.voteComment=async function(postId,cid,delta){
   localStorage.setItem(key,prev===delta?"0":String(delta));
 };
 
+window.deleteComment=async function(postId,cid,isReply){
+  if(!confirm("Delete this comment?")) return;
+  await remove(ref(db,`comments/${postId}/${cid}`));
+  if(!isReply){
+    const cc=await get(ref(db,`commentCount/${postId}`));
+    const cur=cc.val()||0;
+    await set(ref(db,`commentCount/${postId}`),Math.max(0,cur-1));
+  }
+  toast("Comment deleted");
+};
+
 window.showReplyBox=function(postId,pcid){
   const box=$(`rb-${pcid}`); if(!box) return;
   if(box.innerHTML){box.innerHTML=""; return;}
   box.innerHTML=`
     <div class="comment-input-row" style="margin-top:8px;">
       <input id="ri-${pcid}" placeholder="Reply…"/>
+      <label class="c-upload-btn" title="Attach file">
+        <i class="ph ph-paperclip"></i>
+        <input type="file" id="cf-reply-${pcid}" accept="image/*,.pdf,.doc,.docx" style="display:none;"/>
+      </label>
       <button class="icon-btn" onclick="submitComment('${postId}','${pcid}')"><i class="ph ph-paper-plane-right"></i></button>
-    </div>`;
+    </div>
+    <div id="cfp-reply-${pcid}" style="font-size:12px;color:var(--txt-3);margin-top:4px;"></div>`;
   const i=$(`ri-${pcid}`); if(i) i.onkeypress=e=>{if(e.key==="Enter") submitComment(postId,pcid);};
+  $(`cf-reply-${pcid}`).onchange=e=>{ const f=e.target.files[0]; if(f) $(`cfp-reply-${pcid}`).textContent="📎 "+f.name; };
 };
 
 window.submitComment=async function(postId,parentId){
   const inputId=parentId?`ri-${parentId}`:`ci-${postId}`;
   const inp=$(inputId); if(!inp) return;
   const text=inp.value.trim();
-  const fi=$(`cf-${postId}`);
+  const fi=parentId?$(`cf-reply-${parentId}`):$(`cf-${postId}`);
   const file=fi?.files?.[0];
   if(!text&&!file) return;
 
   let fileURL=null,fileName=null;
-  if(file){ toast("Uploading…"); fileURL=await uploadFile(file,`comments/${postId}/${Date.now()}_${file.name}`); fileName=file.name; }
+  if(file){
+    toast("Uploading…");
+    try {
+      fileURL=await uploadFile(file);
+      fileName=file.name;
+    } catch(e) {
+      toast("Upload failed: "+e.message);
+      return;
+    }
+  }
 
   await push(ref(db,`comments/${postId}`),{
     text:text||"",author:currentUser,authorId:currentUID,
@@ -722,8 +766,12 @@ window.submitComment=async function(postId,parentId){
   await set(ref(db,`commentCount/${postId}`),(cc.val()||0)+1);
 
   inp.value="";
-  if(fi){fi.value=""; const fp=$(`cfp-${postId}`); if(fp) fp.textContent="";}
-
+  if(parentId){
+    const rfi=$(`cf-reply-${parentId}`); if(rfi) rfi.value="";
+    const rfp=$(`cfp-reply-${parentId}`); if(rfp) rfp.textContent="";
+  } else {
+    if(fi){fi.value=""; const fp=$(`cfp-${postId}`); if(fp) fp.textContent="";}
+  }
   // Notify post owner
   const ps=await get(ref(db,`posts/${postId}`)); const p=ps.val();
   if(p?.owner&&p.owner!==currentUser){
@@ -783,7 +831,16 @@ function openComposer(){
     if(!text&&!pendingFile) return;
     $("psub").textContent="Posting…"; $("psub").disabled=true;
     let fileURL=null,fileName=null;
-    if(pendingFile){ fileURL=await uploadFile(pendingFile,`posts/${currentUID}_${Date.now()}_${pendingFile.name}`); fileName=pendingFile.name; }
+    if(pendingFile){
+      try {
+        fileURL=await uploadFile(pendingFile);
+        fileName=pendingFile.name;
+      } catch(e) {
+        toast("Upload failed: "+e.message);
+        $("psub").textContent="Whisper →"; $("psub").disabled=false;
+        return;
+      }
+    }
     const anon=$("panon").checked;
     await push(ref(db,"posts"),{
       author:anon?"Anonymous":currentUser,
@@ -1010,8 +1067,8 @@ window.openRoom=async function(roomId){
         <div class="bubble ${mine?"mine":""}">
           ${!mine?`<div class="b-author">${author}</div>`:""}
           ${m.text?`<div class="b-text">${m.text}</div>`:""}
-          ${m.fileURL?(m.fileURL.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)
-            ?`<img class="b-img" src="${m.fileURL}" alt="img"/>`
+          ${m.fileURL?((m.fileURL.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)||/cloudinary\.com.*\/(image|upload)/i.test(m.fileURL))
+            ?`<img class="b-img" src="${m.fileURL}" onclick="openLightbox('${m.fileURL}')" style="cursor:zoom-in;" alt="img"/>`
             :`<a href="${m.fileURL}" target="_blank" style="${mine?"color:#fff":"color:var(--blue)"};font-size:12px;">📎 ${m.fileName||"File"}</a>`):""}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div class="b-time">${timeAgo(m.time)}</div>
@@ -1032,7 +1089,7 @@ window.openRoom=async function(roomId){
       const b=$("blk"); if(b){b.style.display="block";setTimeout(()=>b.style.display="none",3000);} return;
     }
     let fu=null,fn=null;
-    if(file){toast("Uploading…");fu=await uploadFile(file,`rooms/${roomId}/${Date.now()}_${file.name}`);fn=file.name;}
+    if(file){toast("Uploading…");fu=await uploadFile(file);fn=file.name;}
     await push(chatRef,{text,displayName:anon?"Anonymous":currentUser,realNick:currentUser,senderUID:currentUID,fileURL:fu||null,fileName:fn||null,time:Date.now()});
     $("chatIn").value=""; $("chatfile").value=""; $("cfp").textContent="";
   };
